@@ -14,6 +14,7 @@ import './App.css';
 
 // Utilities
 const STORAGE_KEY = 'browserNotesApp_notes_v1';
+const THEME_KEY = 'browserNotesApp_theme_v1';
 
 function loadNotesFromStorage() {
   try {
@@ -35,11 +36,26 @@ function saveNotesToStorage(notes) {
   }
 }
 
-// PUBLIC_INTERFACE
-export function formatDate(ts) {
-  /** Format a timestamp to a short human-readable string. */
-  const d = new Date(ts);
-  return d.toLocaleString();
+function loadTheme() {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch {
+    // ignore
+  }
+  // Default to system preference
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return 'light';
+}
+
+function saveTheme(theme) {
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    // ignore
+  }
 }
 
 /**
@@ -57,6 +73,12 @@ function ToolbarButton({ children, onClick, variant = 'primary', type = 'button'
     </button>
   );
 }
+
+/* Ensure formatDate is available in this scope */
+const _formatDate = (ts) => {
+  const d = new Date(ts);
+  return d.toLocaleString();
+};
 
 // PUBLIC_INTERFACE
 export function NotesList({ notes, onDelete, onEdit }) {
@@ -78,12 +100,12 @@ export function NotesList({ notes, onDelete, onEdit }) {
           <div className="note-card-head">
             <h3 className="note-title">{n.title || 'Untitled'}</h3>
             <div className="note-meta">
-              <span title={`Created ${formatDate(n.createdAt)}`}>
-                Created {formatDate(n.createdAt)}
+              <span title={`Created ${_formatDate(n.createdAt)}`}>
+                Created {_formatDate(n.createdAt)}
               </span>
               <span aria-hidden="true">•</span>
-              <span title={`Updated ${formatDate(n.updatedAt)}`}>
-                Updated {formatDate(n.updatedAt)}
+              <span title={`Updated ${_formatDate(n.updatedAt)}`}>
+                Updated {_formatDate(n.updatedAt)}
               </span>
             </div>
           </div>
@@ -180,13 +202,30 @@ export function NoteForm({ initialNote, onCancel, onSave }) {
 }
 
 // PUBLIC_INTERFACE
+function ThemeToggle({ theme, onToggle }) {
+  /** Accessible theme toggle button with emoji indicator. */
+  const isDark = theme === 'dark';
+  const label = isDark ? 'Switch to light theme' : 'Switch to dark theme';
+  return (
+    <button
+      className="btn btn-outline"
+      onClick={onToggle}
+      aria-label={label}
+      title={label}
+    >
+      {isDark ? '🌙 Dark' : '🌞 Light'}
+    </button>
+  );
+}
+
+// PUBLIC_INTERFACE
 function App() {
   /**
    * Notes App - single page UI to add, edit, delete notes in browser memory.
    * - Keeps notes in React state and persists to localStorage.
-   * - Clean, modern light theme using specified color accents.
+   * - Supports light/dark theme with CSS variables and persisted preference.
    */
-  const [theme] = useState('light'); // fixed light theme as requested
+  const [theme, setTheme] = useState(() => loadTheme());
   const [notes, setNotes] = useState(() => loadNotesFromStorage());
   const [editingNote, setEditingNote] = useState(null);
   const [query, setQuery] = useState('');
@@ -194,6 +233,13 @@ function App() {
   useEffect(() => {
     saveNotesToStorage(notes);
   }, [notes]);
+
+  useEffect(() => {
+    // Persist theme and set attribute for CSS
+    saveTheme(theme);
+    // Optional marker to prevent prefers-color-scheme override in CSS
+    document.documentElement.setAttribute('data-force-theme', theme);
+  }, [theme]);
 
   const filteredNotes = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -244,6 +290,8 @@ function App() {
     }
   }
 
+  const toggleTheme = () => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+
   return (
     <div className="App app-root" data-theme={theme}>
       <header className="topbar" role="banner">
@@ -253,6 +301,7 @@ function App() {
             <span className="brand-text">Browser Notes</span>
           </div>
           <div className="top-actions">
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <div className="env-chip" title="Environment">
               {process.env.REACT_APP_NODE_ENV || 'development'}
             </div>
